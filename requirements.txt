@@ -1,0 +1,5 @@
+pylint
+slackclient
+slackeventsapi
+Flask
+PyGithub
