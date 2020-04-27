@@ -2,8 +2,8 @@
 
 """slack bock which updates emoji of build status in pr links."""
 
-import os
 import re
+import os
 import time
 import threading
 from github import Github
@@ -20,8 +20,7 @@ SLACK_SIGNING_SECRET = os.environ['SLACK_SIGNING_SECRET']
 SLACK_CLIENT = slack.WebClient(token=SLACK_TOKEN)
 
 # Our app's Slack Event Adapter for receiving actions via the Events API
-SLACK_EVENTS_ADAPTER = SlackEventAdapter(
-    SLACK_SIGNING_SECRET, "/slack/events", APP)
+SLACK_EVENTS_ADAPTER = SlackEventAdapter(SLACK_SIGNING_SECRET, "/slack/events", APP)
 
 
 # Get WebClient so you can communicate back to Slack.
@@ -37,8 +36,9 @@ EMOJI = {"pass": "pass", "fail": "fail", "pending": "pending",
 MONITORING_THREADS = {}
 
 
-def github_ci_status(repo_name, sha):
+def github_ci_status(repo_name, pr_number):
     """Returns status of travis build. """
+    sha = G.get_repo(repo_name).get_pull(pr_number).head.sha
     status = G.get_repo(repo_name).get_commit(sha).get_combined_status().state
     if status in ('failure', 'error'):
         value = EMOJI['fail']
@@ -47,7 +47,6 @@ def github_ci_status(repo_name, sha):
     elif status == 'success':
         value = EMOJI['pass']
     return value
-
 
 def github_status(repo_name, pr_number):
     """Returns pr status. """
@@ -63,14 +62,12 @@ def github_status(repo_name, pr_number):
                 status = EMOJI['change_requested']
     return [G.get_repo(repo_name).get_pull(pr_number).title, status]
 
-
 def slack_post(channel, thread, message):
     """ Posts message in slack channel inside the thread. """
     CLIENT.chat_postMessage(
         channel=channel,
         thread_ts=thread,
         text=message)
-
 
 def slack_react(channel, thread, emoji):
     """ Posts emoji inside slack channel thread. """
@@ -80,7 +77,6 @@ def slack_react(channel, thread, emoji):
         if error.response['ok'] is False and error.response['error'] == 'already_reacted':
             pass
 
-
 def slack_unreact(channel, thread, emoji):
     """ Remove emoji from slack channel inside the thread """
     try:
@@ -88,7 +84,6 @@ def slack_unreact(channel, thread, emoji):
     except slack.errors.SlackApiError as error:
         if error.response['ok'] is False and error.response['error'] == 'already_reacted':
             pass
-
 
 def monitor_list(meta):
     """Keep list of umerged threads to check periodically. """
@@ -100,21 +95,22 @@ def handle_message(event_data):
     """" Reads incoming message and looks if it is git pull request. """
     message = event_data["event"]
     text = message.get("text")
-    git_urls = re.findall(r'https://github.com/\S+/\S+/pull/\d+', text)
+    if text:
+        git_url = re.findall(r'https://github.com/\S+/\S+/pull/\d+', text)
     # going to take only the first url in message and ignore rest
-    if git_urls:
+    if git_url:
+        first_url = git_url[0].split('/')
+        print(first_url)
         channel_id = message["channel"]
         thread_ts = message['ts']
-        first_url = git_urls[0].split('/')
         url_meta = {"repo_name": first_url[3] + "/" + first_url[4],
                     "pull_number": int(first_url[6])}
-        git_sha = G.get_repo(url_meta["repo_name"]).get_pull(url_meta["pull_number"]).head.sha
         git_status = github_status(
             url_meta["repo_name"],
             url_meta["pull_number"])
-        # git_title = 'Github issue title: ' + \
+        #git_title = 'Github issue title: ' + \
         #    github_status(url_meta["repo_name"], url_meta["pull_number"])[0]
-        ci_status = github_ci_status(url_meta["repo_name"], git_sha)
+        ci_status = github_ci_status(url_meta["repo_name"], url_meta["pull_number"])
         reaction_list = CLIENT.reactions_get(
             channel=channel_id, timestamp=thread_ts, full="true")
 
@@ -127,12 +123,8 @@ def handle_message(event_data):
             updated_emoji_list.append(git_status[1])
         else:
             updated_emoji_list.append(git_status[1])
-            monitor_list([thread_ts,
-                          url_meta["repo_name"],
-                          url_meta["pull_number"],
-                          git_sha,
-                          channel_id,
-                          ci_status])
+            monitor_list([thread_ts, url_meta["repo_name"], \
+            url_meta["pull_number"], channel_id, ci_status])
 
         for item in updated_emoji_list:
             slack_react(channel_id, thread_ts, item)
@@ -142,7 +134,6 @@ def handle_message(event_data):
 def error_handler(err):
     """ Prints errors to stdout. """
     print("ERROR: " + str(err))
-
 
 @APP.before_first_request
 def activate_job():
@@ -154,28 +145,22 @@ def activate_job():
                 print("MONITORING_THREADS are ")
                 print(MONITORING_THREADS)
                 for key, value in MONITORING_THREADS.items():
-                    monitor_ci_status = github_ci_status(value[0], value[2])
-                    monitor_channel_id = value[3]
+                    monitor_ci_status = github_ci_status(value[0], value[1])
+                    monitor_channel_id = value[2]
                     monitor_thread_ts = key
-                    if monitor_ci_status != value[4]:
-                        slack_unreact(
-                            monitor_channel_id, monitor_thread_ts, value[4])
-                        slack_react(
-                            monitor_channel_id,
-                            monitor_thread_ts,
-                            monitor_ci_status)
-                        MONITORING_THREADS[key] = [
-                            value[0], value[1], value[2], value[3], monitor_ci_status]
+                    if monitor_ci_status != value[3]:
+                        slack_unreact(monitor_channel_id, monitor_thread_ts, value[3])
+                        slack_react(monitor_channel_id, monitor_thread_ts, monitor_ci_status)
+                        MONITORING_THREADS[key] = [value[0], value[1],\
+                        value[2], monitor_ci_status]
                     if G.get_repo(value[0]).get_pull(value[1]).is_merged():
-                        slack_react(
-                            monitor_channel_id, monitor_thread_ts, 'merge')
+                        slack_react(monitor_channel_id, monitor_thread_ts, 'merge')
                         del_threads.append(key)
             for item in del_threads:
                 del MONITORING_THREADS[item]
             time.sleep(30)
     thread = threading.Thread(target=run_job)
     thread.start()
-
 
 if __name__ == "__main__":
     APP.run(port=5000)
