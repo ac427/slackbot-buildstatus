@@ -13,3 +13,4 @@ watched for github pr url and updates the staus of build with emoji. Also tracks
 ![slack-status3](https://github.com/ac427/slackbot-buildstatus/raw/master/images/image3.png)
 ![slack-status4](https://github.com/ac427/slackbot-buildstatus/raw/master/images/image4.png)
 ![slack-status5](https://github.com/ac427/slackbot-buildstatus/raw/master/images/image5.png)
+![slack-status6](https://github.com/ac427/slackbot-buildstatus/raw/master/images/image6.png)
