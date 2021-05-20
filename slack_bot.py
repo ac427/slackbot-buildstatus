@@ -2,6 +2,8 @@
 
 """slack bock which updates emoji of build status in pr links."""
 
+from setup.db_operations import create_tables, insert_record
+from GracefulKiller import GracefulKiller
 import re
 import os
 import time
@@ -10,6 +12,8 @@ from github import Github
 import slack
 from slackeventsapi import SlackEventAdapter
 from flask import Flask
+
+# from setup.db_operations import create_database
 
 APP = Flask(__name__)
 
@@ -123,6 +127,8 @@ def handle_message(event_data):
             updated_emoji_list.append(git_status[1])
         else:
             updated_emoji_list.append(git_status[1])
+            insert_record(thread_ts, url_meta["repo_name"], url_meta["pull_number"], channel_id, ci_status)
+
             monitor_list([thread_ts, url_meta["repo_name"], \
             url_meta["pull_number"], channel_id, ci_status])
 
@@ -135,11 +141,15 @@ def error_handler(err):
     """ Prints errors to stdout. """
     print("ERROR: " + str(err))
 
+global killer
+
 @APP.before_first_request
 def activate_job():
     """ Monitor all the unmerged jobs """
+    create_tables()
+
     def run_job():
-        while True:
+        while not killer.kill_now:
             del_threads = []
             if MONITORING_THREADS:
                 print("MONITORING_THREADS are ")
@@ -163,4 +173,6 @@ def activate_job():
     thread.start()
 
 if __name__ == "__main__":
+    killer = GracefulKiller()
+
     APP.run(port=5000)
