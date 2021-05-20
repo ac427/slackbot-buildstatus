@@ -135,6 +135,10 @@ def error_handler(err):
     """ Prints errors to stdout. """
     print("ERROR: " + str(err))
 
+@APP.route('/')
+def hello_world():
+    return 'Welcome to Slack Bot for build status!'
+
 @APP.before_first_request
 def activate_job():
     """ Monitor all the unmerged jobs """

@@ -3,3 +3,4 @@ slackclient
 slackeventsapi
 Flask
 PyGithub
+gunicorn
